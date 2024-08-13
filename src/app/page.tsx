@@ -1,95 +1,128 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
 
-export default function Home() {
-  return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>src/app/page.tsx</code>
-        </p>
-        <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Box, Button, SimpleGrid, Text, useToast, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton } from '@chakra-ui/react';
+import { useQuery, gql, useMutation } from '@apollo/client';
 
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+const GET_NOTES = gql`
+  query GetNotes {
+    notes {
+      id
+      title
+      body
+      createdAt
+    }
+  }
+`;
 
-      <div className={styles.grid}>
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p>Find in-depth information about Next.js features and API.</p>
-        </a>
+const DELETE_NOTE = gql`
+  mutation DeleteNote($id: Int!) {
+    deleteNote(id: $id) {
+      id
+    }
+  }
+`;
 
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Learn <span>-&gt;</span>
-          </h2>
-          <p>Learn about Next.js in an interactive course with&nbsp;quizzes!</p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p>Explore starter templates for Next.js.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  );
+interface Note {
+  id: number;
+  title: string;
+  body: string;
+  createdAt: string;
 }
+
+const MainPage = () => {
+  const { loading, error, data } = useQuery(GET_NOTES);
+  const [deleteNote] = useMutation(DELETE_NOTE, {
+    refetchQueries: [{ query: GET_NOTES }],
+    onCompleted: () => {
+      toast({
+        title: "Note deleted.",
+        description: "The note was successfully deleted.",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+    },
+  });
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const toast = useToast();
+
+  useEffect(() => {
+    if (data) {
+      setNotes(data.notes);
+    }
+  }, [data]);
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+
+  const handleDelete = async (id: number) => {
+    await deleteNote({
+      variables: { id },
+    });
+  };
+
+  const handleViewDetails = (note: Note) => {
+    setSelectedNote(note);
+    onOpen();
+  };
+
+  return (
+    <Box p={5}>
+      {notes.length === 0 ? (
+        <Text>Tidak Ada Data</Text>
+      ) : (
+        <SimpleGrid columns={[1, 2, 3]} spacing={10}>
+          {notes.map((note) => (
+            <Box key={note.id} p={5} shadow="md" borderWidth="1px">
+              <Text mt={4} fontWeight="bold">{note.title}</Text>
+              <Text mt={4} noOfLines={1}>{note.body}</Text>
+              <Button mt={4} colorScheme="blue" onClick={() => handleViewDetails(note)}>View</Button>
+              <Link href={`/editNote/${note.id}`} passHref>
+                <Button mt={4} ml={2} colorScheme="teal">Edit</Button>
+              </Link>
+              <Button
+                mt={4}
+                ml={2}
+                colorScheme="red"
+                onClick={() => handleDelete(note.id)}
+              >
+                Delete
+              </Button>
+            </Box>
+          ))}
+        </SimpleGrid>
+      )}
+
+      <Link href="/addNote" passHref>
+        <Button
+          position="fixed"
+          bottom="4"
+          right="4"
+          colorScheme="teal"
+        >
+          Add Note
+        </Button>
+      </Link>
+
+      {selectedNote && (
+        <Modal isOpen={isOpen} onClose={onClose}>
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>{selectedNote.title}</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              <Text fontSize="sm" color="gray.500">{selectedNote.createdAt}</Text>
+              <Text mt={4}>{selectedNote.body}</Text>
+            </ModalBody>
+          </ModalContent>
+        </Modal>
+      )}
+    </Box>
+  );
+};
+
+export default MainPage;
